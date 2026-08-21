@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  --background: #d9d3c5;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-noto-sans);
+  --font-serif: var(--font-noto-serif);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.a4-page {
+  width: 210mm;
+  height: 297mm;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+@media print {
+  html,
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .a4-page {
+    box-shadow: none !important;
+    width: 210mm !important;
+    height: 297mm !important;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}

@@ -1,0 +1,97 @@
+import { NextResponse } from 'next/server';
+import { extract } from '@extractus/article-extractor';
+
+export async function POST(req: Request) {
+  try {
+    const { url } = await req.json();
+    if (!url) {
+      return NextResponse.json({ error: 'URL을 입력해주세요.' }, { status: 400 });
+    }
+
+    const article = await extract(url);
+
+    if (!article) {
+      return NextResponse.json({ error: '기사 내용을 가져올 수 없습니다.' }, { status: 500 });
+    }
+
+    let raw = article.content || '';
+
+    // 미디어, 스크립트, 태그 제거
+    raw = raw.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    raw = raw.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    raw = raw.replace(/<figure\b[^<]*(?:(?!<\/figure>)<[^<]*)*<\/figure>/gi, '');
+    raw = raw.replace(/<figcaption\b[^<]*(?:(?!<\/figcaption>)<[^<]*)*<\/figcaption>/gi, '');
+    raw = raw.replace(/<img[^>]*>/gi, '');
+    raw = raw.replace(/<\/(div|section|article|header|aside)>/gi, '\n');
+    raw = raw.replace(/<(div|section|article|header|aside)[^>]*>/gi, '');
+    raw = raw.replace(/<br\s*[\/]?>/gi, '\n');
+    raw = raw.replace(/<h[1-4][^>]*>(.*?)<\/h[1-4]>/gi, '### $1\n');
+    raw = raw.replace(/<[^>]+>/g, '');
+
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    let subheadings: string[] = [];
+    let formattedParagraphs: string[] = [];
+
+    // 기사 최상단 1~3줄 중 짧은 글머리 기호/개조식 문장은 부제목(서브헤드)으로 별도 분리
+    let parsingSubhead = true;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // 저작권 및 노이즈 필터링
+      if (
+        line.includes('제공') ||
+        line.includes('사진=') ||
+        line.includes('출처=') ||
+        line.includes('무단 전재') ||
+        line.includes('All rights reserved') ||
+        line.includes('기자') ||
+        line.includes('@') ||
+        line.length < 3
+      ) {
+        continue;
+      }
+
+      // 부제목 추출 조건 (상단부에 위치하며 45자 이하의 단문 또는 글머리 기호)
+      if (
+        parsingSubhead &&
+        (line.startsWith('‘') || line.startsWith('“') || line.startsWith('-') || line.startsWith('·') || line.startsWith('▶') || line.length <= 40) &&
+        !line.endsWith('다.') &&
+        subheadings.length < 3
+      ) {
+        subheadings.push(line.replace(/^[·▶\-\s]+/, ''));
+        continue;
+      } else {
+        parsingSubhead = false;
+      }
+
+      // 본문 중간 소제목
+      if (
+        line.startsWith('### ') || 
+        line.startsWith('■') || 
+        line.startsWith('◇') || 
+        line.startsWith('◆') || 
+        (line.length <= 30 && !line.endsWith('다.') && !line.endsWith('까?') && !line.endsWith('요.'))
+      ) {
+        const cleanSub = line.replace(/^###\s*|^[■◇◆\s]+/, '');
+        formattedParagraphs.push(`<h3>${cleanSub}</h3>`);
+      } else {
+        formattedParagraphs.push(`<p>${line}</p>`);
+      }
+    }
+
+    return NextResponse.json({
+      id: Date.now().toString(),
+      title: article.title || '제목 없음',
+      subheading: subheadings.length > 0 ? subheadings.join('\n') : null,
+      content: formattedParagraphs.join('') || '<p>본문 내용이 없습니다.</p>',
+      image: article.image || null,
+      url: url,
+      source: article.source || '',
+      published: article.published || new Date().toISOString().split('T')[0]
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || '스크랩 실패' }, { status: 500 });
+  }
+}
