@@ -10,7 +10,10 @@ import {
   Plus, 
   ChevronLeft, 
   ChevronRight,
-  Newspaper
+  Newspaper,
+  HelpCircle,
+  Coffee,
+  X
 } from 'lucide-react';
 
 interface Article {
@@ -24,11 +27,24 @@ interface Article {
   published?: string;
 }
 
+const decodeHtml = (html: string) => {
+  if (!html) return '';
+  return html
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+};
+
 export default function Home() {
   const [urlInput, setUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [articles, setArticles] = useState<Article[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [showDonateModal, setShowDonateModal] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -78,6 +94,10 @@ export default function Home() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '스크랩에 실패했습니다.');
+
+      data.title = decodeHtml(data.title);
+      if (data.subheading) data.subheading = decodeHtml(data.subheading);
+      data.content = decodeHtml(data.content);
 
       setArticles((prev) => [...prev, data]);
       setUrlInput('');
@@ -174,7 +194,7 @@ export default function Home() {
   }, [activePageArticles]);
 
   return (
-    <div className="min-h-screen bg-neutral-100 flex flex-col items-center py-6 px-4 font-sans">
+    <div className="min-h-screen bg-neutral-100 flex flex-col items-center py-6 px-4 font-sans relative">
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap');
 
@@ -210,15 +230,188 @@ export default function Home() {
           <h1 className="text-lg font-bold text-neutral-800">신문 기사 아카이브 및 A4조판 서비스 페이지 @Digital-Hennie</h1>
         </div>
 
-        <button
-          onClick={() => handlePrint()}
-          disabled={activePageArticles.length === 0}
-          className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg hover:bg-neutral-800 disabled:bg-neutral-300 transition-colors shadow-sm font-medium text-xs cursor-pointer"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          현재 페이지 PDF 인쇄/저장
-        </button>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* 이용방법 안내 버튼 */}
+          <button
+            onClick={() => setShowGuideModal(true)}
+            className="flex items-center gap-1.5 bg-neutral-100 text-neutral-700 border border-neutral-300 px-3 py-2 rounded-lg hover:bg-neutral-200 transition-colors shadow-sm font-medium text-xs cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-neutral-600" />
+            <span>이용방법 안내</span>
+          </button>
+
+          {/* 카카오페이 커피 후원 모달 버튼 */}
+          <button
+            onClick={() => setShowDonateModal(true)}
+            className="flex items-center gap-1.5 bg-[#FEE500] text-[#191919] border border-amber-300 px-3 py-2 rounded-lg hover:bg-yellow-400 transition-colors shadow-sm font-medium text-xs cursor-pointer"
+          >
+            <Coffee className="w-3.5 h-3.5 text-amber-900" />
+            <span>개발자 커피 후원</span>
+          </button>
+
+          {/* PDF 인쇄 버튼 */}
+          <button
+            onClick={() => handlePrint()}
+            disabled={activePageArticles.length === 0}
+            className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg hover:bg-neutral-800 disabled:bg-neutral-300 transition-colors shadow-sm font-medium text-xs cursor-pointer"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            현재 페이지 PDF 인쇄/저장
+          </button>
+        </div>
       </header>
+
+      {/* 카카오페이 QR 후원 모달 */}
+      {showDonateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-neutral-100 animate-in fade-in zoom-in-95 duration-150 flex flex-col items-center text-center">
+            <div className="w-full flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+                  <Coffee className="w-4 h-4 text-amber-700" />
+                </div>
+                <h2 className="text-sm font-bold text-neutral-900">개발자에게 커피 한 잔</h2>
+              </div>
+              <button
+                onClick={() => setShowDonateModal(false)}
+                className="text-neutral-400 hover:text-neutral-700 p-1.5 rounded-lg hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-600 leading-relaxed mb-4 text-left">
+              본 서비스가 유용하셨다면 따뜻한 커피 한 잔을 후원해 주세요. 더 쾌적한 아카이브 환경을 만드는 데 큰 힘이 됩니다. ☕
+            </p>
+
+            {/* QR 이미지 컨테이너 */}
+            <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-3.5 mb-4 flex flex-col items-center justify-center w-full shadow-inner">
+              <div className="w-48 h-48 bg-white border border-neutral-200 rounded-xl overflow-hidden flex items-center justify-center shadow-xs">
+                <img
+                  src="/kakaopay-qr.png"
+                  alt="카카오페이 송금 QR"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                    const parent = (e.target as HTMLElement).parentElement;
+                    if (parent) {
+                      parent.innerHTML = '<span class="text-xs text-neutral-400 p-3 leading-relaxed">public 폴더에<br/>kakaopay-qr.png 이미지를 넣어주세요</span>';
+                    }
+                  }}
+                />
+              </div>
+              <span className="text-[11px] font-medium text-neutral-500 mt-2.5">
+                카카오톡 [송금] 렌즈 또는 기본 카메라로 스캔
+              </span>
+            </div>
+
+            <button
+              onClick={() => setShowDonateModal(false)}
+              className="w-full bg-neutral-900 text-white py-2.5 rounded-xl text-xs font-medium hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 이용방법 모달 팝업 */}
+      {showGuideModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-neutral-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3.5 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <HelpCircle className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-neutral-900">서비스 이용 가이드</h2>
+                  <p className="text-[11px] text-neutral-400">편리한 신문 기사 아카이빙을 위한 안내</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowGuideModal(false)}
+                className="text-neutral-400 hover:text-neutral-700 p-1.5 rounded-lg hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs leading-relaxed text-neutral-600">
+              {/* 1. 이용방법 순서 */}
+              <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 text-neutral-800">
+                <p className="font-bold text-blue-950 mb-2 flex items-center gap-1.5 text-[13px]">
+                  <span>📖</span>
+                  <span>이용방법</span>
+                </p>
+                <ol className="space-y-1.5 list-none font-medium">
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">1</span>
+                    <span>스크랩하고 싶은 뉴스의 페이지 주소(URL)를 추가하여 주세요. (개별 언론사페이지보다 네이버와 같은 포털 내 뉴스페이지를 이용하시면 더욱 안정적으로 적용됩니다.)</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">2</span>
+                    <span>기사 길이에 따라 한 페이지에 최대 4건까지 배치됩니다.</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">3</span>
+                    <span>스크랩 목록에서 스크랩한 기사의 순서를 바꾸면 기사 배열 순서가 함께 바뀝니다.</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">4</span>
+                    <span>원하는 페이지가 완성되면 우측 상단의 <strong>[현재 페이지 PDF 인쇄/저장]</strong> 버튼을 눌러 저장 또는 인쇄합니다.</span>
+                  </li>
+                </ol>
+              </div>
+
+              {/* 2. 비상업적 무료 프로젝트 안내 */}
+              <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-3.5">
+                <p className="font-semibold text-neutral-800 mb-1 flex items-center gap-1.5">
+                  <span>☕</span>
+                  <span>비상업적 무료 프로젝트 안내</span>
+                </p>
+                <p className="text-neutral-600 leading-normal">
+                  본 서비스는 <strong>Digital-Hennie</strong>가 개인적인 필요와 스크랩 편의를 위해 자발적으로 만든 <strong>비상업적 아카이브 도구</strong>입니다. 학습, 연구, 개인 보관용으로 자유롭게 이용해 주시되, <strong>상업적 용도로의 무단 전재 및 활용은 삼가</strong>해 주시기 바랍니다.
+                </p>
+              </div>
+
+              {/* 3. 기사 추출 팁 */}
+              <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3.5 text-blue-950">
+                <p className="font-semibold mb-1 flex items-center gap-1.5">
+                  <span>💡</span>
+                  <span>기사 본문이 잘 불러와지지 않을 때</span>
+                </p>
+                <p className="leading-normal">
+                  일부 언론사 웹페이지의 보안 정책이나 구조적 제약으로 본문 추출이 원활하지 않을 수 있습니다. 이 경우 해당 기사의 <strong>'네이버 뉴스' 페이지 링크</strong>를 복사해 입력해 주시면 훨씬 안정적으로 기사가 조판됩니다.
+                </p>
+              </div>
+
+              {/* 4. 문의 및 피드백 */}
+              <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-3.5 text-amber-950">
+                <p className="font-semibold mb-1 flex items-center gap-1.5">
+                  <span>💬</span>
+                  <span>소중한 의견과 아이디어를 들려주세요</span>
+                </p>
+                <p className="leading-normal">
+                  서비스를 이용하시면서 느끼신 개선점이나 더 좋은 레이아웃 아이디어가 있다면 언제든 편하게 메일로 전해 주세요. 여러분의 피드백으로 더 읽기 좋은 서비스를 만들어가겠습니다.
+                </p>
+                <p className="font-medium mt-1 text-[11px] text-amber-800">
+                  문의처: <a href="mailto:artmkt@naver.com" className="underline underline-offset-2">artmkt@naver.com</a>
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setShowGuideModal(false)}
+                className="bg-neutral-900 text-white px-4 py-2 rounded-xl text-xs font-medium hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* 좌측 패널 */}
@@ -386,7 +579,7 @@ export default function Home() {
                             )}
                           </div>
 
-                          {/* 2. 부제목 박스 (대제목 바로 밑 전체 폭) */}
+                          {/* 2. 부제목 박스 */}
                           {art.subheading && (
                             <div
                               contentEditable
@@ -399,12 +592,11 @@ export default function Home() {
                             </div>
                           )}
 
-                          {/* 3. 본문 2단 조판 + 자연스러운 인라인 플로팅 이미지 */}
+                          {/* 3. 본문 2단 조판 + 플로팅 이미지 */}
                           <div 
                             className={`newspaper-font newspaper-text flex-1 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden ${columnClass}`}
                             style={{ fontSize, lineHeight }}
                           >
-                            {/* 대표 이미지 (신문식 우측 플로팅으로 글자가 자연스럽게 감싸도록 복구) */}
                             {art.image && (
                               <div 
                                 className="float-right ml-2.5 mb-1.5 p-0.5 border border-neutral-200 bg-white"
@@ -418,7 +610,6 @@ export default function Home() {
                               </div>
                             )}
 
-                            {/* 본문 HTML */}
                             <div
                               contentEditable
                               suppressContentEditableWarning
