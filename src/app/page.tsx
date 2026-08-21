@@ -140,7 +140,7 @@ export default function Home() {
     );
   };
 
-  // 1페이지당 기사 자동 분할 알고리즘
+  // 1페이지당 기사 최대 4개 수용 분할 알고리즘
   const pages: Article[][] = useMemo(() => {
     if (articles.length === 0) return [];
 
@@ -148,13 +148,13 @@ export default function Home() {
     let currentBatch: Article[] = [];
     let currentScore = 0;
 
-    const PAGE_CAPACITY = 3400;
+    const PAGE_CAPACITY = 3600; // 4개 수용을 위해 용량 확대
     const SINGLE_ARTICLE_THRESHOLD = 2600;
 
     for (let i = 0; i < articles.length; i++) {
       const art = articles[i];
       const plainText = art.content.replace(/<[^>]+>/g, '');
-      const score = plainText.length + (art.image ? 180 : 0) + ((art.subheading?.length || 0) * 1.1);
+      const score = plainText.length + (art.image ? 150 : 0) + ((art.subheading?.length || 0) * 1.0);
 
       if (score >= SINGLE_ARTICLE_THRESHOLD) {
         if (currentBatch.length > 0) {
@@ -166,10 +166,10 @@ export default function Home() {
         continue;
       }
 
-      // 최대 3개까지 한 페이지에 깔끔하게 배치
+      // 최대 4개까지 한 페이지에 수용
       if (
         (currentScore + score > PAGE_CAPACITY && currentBatch.length >= 2) ||
-        currentBatch.length >= 3
+        currentBatch.length >= 4
       ) {
         result.push(currentBatch);
         currentBatch = [art];
@@ -201,8 +201,8 @@ export default function Home() {
         }
 
         .newspaper-text p {
-          text-indent: 0.9em;
-          margin-bottom: 0.28em;
+          text-indent: 0.85em;
+          margin-bottom: 0.24em;
           text-align: justify;
           word-break: keep-all;
           overflow-wrap: break-word;
@@ -212,18 +212,18 @@ export default function Home() {
           display: block;
           width: 100%;
           font-weight: 800;
-          margin-top: 0.45em;
-          margin-bottom: 0.2em;
+          margin-top: 0.4em;
+          margin-bottom: 0.15em;
           color: #0f172a;
-          line-height: 1.3;
-          font-size: 0.88em;
+          line-height: 1.25;
+          font-size: 0.86em;
           text-indent: 0 !important;
           text-align: left !important;
           break-after: avoid;
         }
       `}</style>
 
-      {/* 상단 헤더 바 */}
+      {/* 헤더 바 */}
       <header className="w-full max-w-7xl mb-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-xl shadow-sm border border-neutral-200">
         <div className="flex items-center gap-2">
           <Newspaper className="w-5 h-5 text-neutral-800" />
@@ -231,7 +231,6 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 이용방법 안내 버튼 */}
           <button
             onClick={() => setShowGuideModal(true)}
             className="flex items-center gap-1.5 bg-neutral-100 text-neutral-700 border border-neutral-300 px-3 py-2 rounded-lg hover:bg-neutral-200 transition-colors shadow-sm font-medium text-xs cursor-pointer"
@@ -240,7 +239,6 @@ export default function Home() {
             <span>이용방법 안내</span>
           </button>
 
-          {/* 개발자 커피 후원 버튼 */}
           <button
             onClick={() => setShowCoffeeModal(true)}
             className="flex items-center gap-1.5 bg-amber-400 text-amber-950 font-bold px-3 py-2 rounded-lg hover:bg-amber-500 transition-colors shadow-sm text-xs cursor-pointer"
@@ -249,7 +247,6 @@ export default function Home() {
             <span>개발자 커피 후원</span>
           </button>
 
-          {/* PDF 인쇄/저장 버튼 */}
           <button
             onClick={() => handlePrint()}
             disabled={activePageArticles.length === 0}
@@ -350,9 +347,9 @@ export default function Home() {
         </div>
       )}
 
-      {/* 메인 작업 영역 */}
+      {/* 작업 영역 */}
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* 좌측 패널: URL 추가 및 목록 관리 */}
+        {/* 좌측 패널 */}
         <div className="lg:col-span-4 flex flex-col gap-3">
           <form onSubmit={handleAddArticle} className="bg-white p-3 rounded-xl shadow-sm border border-neutral-200 flex flex-col gap-2">
             <label className="text-[11px] font-semibold text-neutral-500 tracking-wide uppercase">신문 기사 URL 추가</label>
@@ -434,7 +431,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 우측: A4 뷰어 & 인쇄 영역 */}
+        {/* 우측: A4 뷰어 */}
         <div className="lg:col-span-8 flex flex-col items-center gap-3">
           <div className="w-full flex justify-center overflow-x-auto p-1">
             <div
@@ -445,11 +442,11 @@ export default function Home() {
                 height: '297mm',
                 minWidth: '210mm',
                 minHeight: '297mm',
-                padding: '8mm 11mm',
+                padding: '8mm 10mm',
               }}
             >
               {/* 마스트헤드 */}
-              <div className="border-b border-neutral-900 pb-0.5 mb-1.5 flex items-baseline gap-2">
+              <div className="border-b border-neutral-900 pb-0.5 mb-1 flex items-baseline gap-2">
                 <h2 className="text-xs font-black tracking-tight text-neutral-900 newspaper-font">NEWS ARCHIVE</h2>
                 <span className="text-[8px] text-neutral-400">|</span>
                 <p className="text-[8px] text-neutral-500">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -463,8 +460,63 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="h-full w-full flex flex-col gap-2 overflow-hidden">
-                    {/* 기사가 3개일 때: 상단 2개 (좌/우 분할) + 하단 1개 (전면 너비) */}
-                    {activePageArticles.length === 3 ? (
+                    {/* [CASE 4] 기사가 4개일 때: 2x2 격자 조판 */}
+                    {activePageArticles.length === 4 ? (
+                      <div className="grid grid-cols-2 grid-rows-2 gap-2.5 h-full overflow-hidden min-h-0">
+                        {activePageArticles.map((art) => {
+                          const formattedDate = formatShortDate(art.published);
+                          return (
+                            <article key={art.id} className="flex flex-col border-b border-r last:border-b-0 odd:border-r border-neutral-200 pb-1 pr-1 overflow-hidden min-h-0">
+                              <div className="flex items-baseline gap-1 mb-0.5 flex-wrap">
+                                <h3
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => handleContentEdit(art.id, 'title', e.currentTarget.innerText)}
+                                  className="newspaper-font font-bold text-neutral-950 leading-tight outline-none focus:bg-neutral-50 tracking-tight inline text-[0.80rem]"
+                                >
+                                  {art.title}
+                                </h3>
+                                {formattedDate && (
+                                  <span className="text-[7px] text-neutral-500 font-normal newspaper-font">
+                                    ({formattedDate})
+                                  </span>
+                                )}
+                              </div>
+
+                              {art.subheading && (
+                                <div
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
+                                  className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-400 px-1 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.65rem] leading-tight"
+                                >
+                                  {art.subheading}
+                                </div>
+                              )}
+
+                              <div className="newspaper-font newspaper-text flex-1 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden text-[0.67rem] leading-[1.38]">
+                                {art.image && (
+                                  <div className="float-right ml-1.5 mb-1 p-0.5 border border-neutral-200 bg-white max-w-[70px]">
+                                    <img
+                                      src={art.image}
+                                      alt="기사 사진"
+                                      className="w-full h-auto object-contain block max-h-20"
+                                    />
+                                  </div>
+                                )}
+                                <div
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => handleContentEdit(art.id, 'content', e.currentTarget.innerHTML)}
+                                  dangerouslySetInnerHTML={{ __html: art.content }}
+                                />
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : activePageArticles.length === 3 ? (
+                      /* [CASE 3] 기사가 3개일 때: 상단 2개 + 하단 1개 */
                       <>
                         <div className="grid grid-cols-2 gap-3 flex-1 overflow-hidden min-h-0 border-b border-neutral-300 pb-2">
                           {activePageArticles.slice(0, 2).map((art) => {
@@ -476,7 +528,7 @@ export default function Home() {
                                     contentEditable
                                     suppressContentEditableWarning
                                     onBlur={(e) => handleContentEdit(art.id, 'title', e.currentTarget.innerText)}
-                                    className="newspaper-font font-bold text-neutral-950 leading-tight outline-none focus:bg-neutral-50 tracking-tight inline text-[0.88rem]"
+                                    className="newspaper-font font-bold text-neutral-950 leading-tight outline-none focus:bg-neutral-50 tracking-tight inline text-[0.85rem]"
                                   >
                                     {art.title}
                                   </h3>
@@ -492,15 +544,15 @@ export default function Home() {
                                     contentEditable
                                     suppressContentEditableWarning
                                     onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
-                                    className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-1.5 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.68rem] leading-snug"
+                                    className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-1.5 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.67rem] leading-snug"
                                   >
                                     {art.subheading}
                                   </div>
                                 )}
 
-                                <div className="newspaper-font newspaper-text flex-1 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden text-[0.72rem] leading-[1.42]">
+                                <div className="newspaper-font newspaper-text flex-1 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden text-[0.70rem] leading-[1.40]">
                                   {art.image && (
-                                    <div className="float-right ml-2 mb-1 p-0.5 border border-neutral-200 bg-white max-w-[85px]">
+                                    <div className="float-right ml-2 mb-1 p-0.5 border border-neutral-200 bg-white max-w-[80px]">
                                       <img
                                         src={art.image}
                                         alt="기사 사진"
@@ -520,7 +572,7 @@ export default function Home() {
                           })}
                         </div>
 
-                        {/* 하단 3번째 기사: 전면 가로 2단 배치 */}
+                        {/* 하단 3번째 기사 */}
                         {activePageArticles[2] && (() => {
                           const art = activePageArticles[2];
                           const formattedDate = formatShortDate(art.published);
@@ -531,7 +583,7 @@ export default function Home() {
                                   contentEditable
                                   suppressContentEditableWarning
                                   onBlur={(e) => handleContentEdit(art.id, 'title', e.currentTarget.innerText)}
-                                  className="newspaper-font font-bold text-neutral-950 leading-tight outline-none focus:bg-neutral-50 tracking-tight inline text-[0.92rem]"
+                                  className="newspaper-font font-bold text-neutral-950 leading-tight outline-none focus:bg-neutral-50 tracking-tight inline text-[0.88rem]"
                                 >
                                   {art.title}
                                 </h3>
@@ -547,15 +599,15 @@ export default function Home() {
                                   contentEditable
                                   suppressContentEditableWarning
                                   onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
-                                  className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-1.5 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.70rem] leading-snug"
+                                  className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-1.5 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.68rem] leading-snug"
                                 >
                                   {art.subheading}
                                 </div>
                               )}
 
-                              <div className="newspaper-font newspaper-text flex-1 columns-2 gap-3 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden text-[0.73rem] leading-[1.45]">
+                              <div className="newspaper-font newspaper-text flex-1 columns-2 gap-3 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden text-[0.71rem] leading-[1.42]">
                                 {art.image && (
-                                  <div className="float-right ml-2 mb-1 p-0.5 border border-neutral-200 bg-white max-w-[90px]">
+                                  <div className="float-right ml-2 mb-1 p-0.5 border border-neutral-200 bg-white max-w-[85px]">
                                     <img
                                       src={art.image}
                                       alt="기사 사진"
@@ -575,13 +627,13 @@ export default function Home() {
                         })()}
                       </>
                     ) : (
-                      /* 기사가 1개 또는 2개일 때의 조판 */
+                      /* [CASE 1, 2] 기사가 1개 또는 2개일 때 */
                       activePageArticles.map((art) => {
                         const count = activePageArticles.length;
                         const formattedDate = formatShortDate(art.published);
-                        const fontSize = count === 1 ? '0.80rem' : '0.75rem';
-                        const lineHeight = count === 1 ? '1.58' : '1.48';
-                        const titleSize = count === 1 ? '1.25rem' : '1.05rem';
+                        const fontSize = count === 1 ? '0.78rem' : '0.73rem';
+                        const lineHeight = count === 1 ? '1.55' : '1.45';
+                        const titleSize = count === 1 ? '1.20rem' : '1.02rem';
 
                         return (
                           <article
@@ -599,7 +651,7 @@ export default function Home() {
                                 {art.title}
                               </h3>
                               {formattedDate && (
-                                <span className="text-[8px] text-neutral-500 font-normal newspaper-font">
+                                <span className="text-[7.5px] text-neutral-500 font-normal newspaper-font">
                                   ({formattedDate})
                                 </span>
                               )}
@@ -610,25 +662,25 @@ export default function Home() {
                                 contentEditable
                                 suppressContentEditableWarning
                                 onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
-                                className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-2 py-0.5 mb-1.5 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.72rem] leading-snug"
+                                className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-2 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.70rem] leading-snug"
                               >
                                 {art.subheading}
                               </div>
                             )}
 
                             <div 
-                              className="newspaper-font newspaper-text flex-1 columns-2 gap-4 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden"
+                              className="newspaper-font newspaper-text flex-1 columns-2 gap-3.5 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden"
                               style={{ fontSize, lineHeight }}
                             >
                               {art.image && (
                                 <div 
-                                  className="float-right ml-2.5 mb-1.5 p-0.5 border border-neutral-200 bg-white"
-                                  style={{ maxWidth: count === 1 ? '115px' : '95px' }}
+                                  className="float-right ml-2 mb-1 p-0.5 border border-neutral-200 bg-white"
+                                  style={{ maxWidth: count === 1 ? '110px' : '90px' }}
                                 >
                                   <img
                                     src={art.image}
                                     alt="기사 사진"
-                                    className="w-full h-auto object-contain block max-h-36"
+                                    className="w-full h-auto object-contain block max-h-32"
                                   />
                                 </div>
                               )}
@@ -656,7 +708,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 하단 페이지네이션 컨트롤 */}
+          {/* 하단 페이지네이션 */}
           <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-neutral-200">
             <button
               onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
