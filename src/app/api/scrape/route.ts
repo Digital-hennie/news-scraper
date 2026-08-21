@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     let published = new Date().toISOString().split('T')[0];
     let source = '';
 
-    // 1. 직접 HTML Fetch (순수 정규식 + 주요 CMS 패턴 매칭)
+    // 1. 직접 HTML Fetch (NDSoft, 네이버, 조선일보, 다음 등 광범위 대응)
     try {
       const response = await fetch(url, {
         headers: {
@@ -29,12 +29,12 @@ export async function POST(req: Request) {
       if (response.ok) {
         const html = await response.text();
 
-        // 1-1. 제목 추출 (포털, 메타태그, NDSoft, 일반 언론사)
+        // 1-1. 제목 추출
         const titleMatch =
-          html.match(/<h2[^>]*id="title_area"[^>]*>([\s\S]*?)<\/h2>/i) ||
-          html.match(/<h1[^>]*class="[^"]*article-head__title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ||
           html.match(/<h3[^>]*class="heading"[^>]*>([\s\S]*?)<\/h3>/i) ||
           html.match(/<div[^>]*class="article-head-title"[^>]*>([\s\S]*?)<\/div>/i) ||
+          html.match(/<h2[^>]*id="title_area"[^>]*>([\s\S]*?)<\/h2>/i) ||
+          html.match(/<h1[^>]*class="[^"]*article-head__title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ||
           html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) ||
           html.match(/<title>([\s\S]*?)<\/title>/i);
 
@@ -55,28 +55,39 @@ export async function POST(req: Request) {
           imageUrl = imgMatch[1];
         }
 
-        // 1-3. 본문 컨테이너 정밀 매칭 (NDSoft(제주의소리 등), 네이버, 조선일보, 다음, 일반 CMS)
-        const bodyMatch =
-          html.match(/<div[^>]*id="article-view-content-div"[^>]*>([\s\S]*?)<\/div>\s*<div[^>]*id="detail-ad/i) ||
-          html.match(/<div[^>]*id="article-view-content-div"[^>]*>([\s\S]*?)<\/div>/i) || // 제주의소리 및 NDSoft
-          html.match(/<div[^>]*class="[^"]*article-veiw-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
-          html.match(/<article[^>]*id="dic_area"[^>]*>([\s\S]*?)<\/article>/i) ||          // 네이버 뉴스
-          html.match(/<div[^>]*id="newsct_article"[^>]*>([\s\S]*?)<\/div>/i) ||
-          html.match(/<div[^>]*id="articleBodyContents"[^>]*>([\s\S]*?)<\/div>/i) ||
-          html.match(/<section[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/section>/i) || // 조선일보
-          html.match(/<div[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
-          html.match(/<div[^>]*class="[^"]*article_view[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
-          html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+        // 1-3. 본문 컨테이너 매칭 (NDSoft 기사 영역을 최우선으로 탐색)
+        // NDSoft 계열은 article-view-content-div 안쪽에 모든 본문 텍스트가 들어있음
+        const ndsoftIndex = html.indexOf('id="article-view-content-div"');
+        if (ndsoftIndex !== -1) {
+          const cutStart = html.substring(ndsoftIndex);
+          // 저작권 또는 관련기사 영역 전까지 자름
+          const cutEndMatch = cutStart.match(/<div[^>]*class="article-view-copyright"|<div[^>]*id="detail-ad|<div[^>]*class="view-copyright/i);
+          if (cutEndMatch && cutEndMatch.index) {
+            rawContent = cutStart.substring(0, cutEndMatch.index);
+          } else {
+            rawContent = cutStart.substring(0, 15000); // 넉넉히 본문 획득
+          }
+        }
 
-        if (bodyMatch) {
-          rawContent = bodyMatch[1];
+        if (!rawContent) {
+          const bodyMatch =
+            html.match(/<article[^>]*id="dic_area"[^>]*>([\s\S]*?)<\/article>/i) ||
+            html.match(/<div[^>]*id="newsct_article"[^>]*>([\s\S]*?)<\/div>/i) ||
+            html.match(/<section[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/section>/i) ||
+            html.match(/<div[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
+            html.match(/<div[^>]*class="[^"]*article_view[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
+            html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+
+          if (bodyMatch) {
+            rawContent = bodyMatch[1];
+          }
         }
 
         // 1-4. 날짜 추출
         const dateMatch =
+          html.match(/승인\s*([0-9]{4}\.[0-9]{2}\.[0-9]{2})/i) ||
           html.match(/data-date-time="([^"]+)"/i) ||
           html.match(/<meta\s+property="article:published_time"\s+content="([^"]+)"/i) ||
-          html.match(/승인\s*([0-9]{4}\.[0-9]{2}\.[0-9]{2})/i) ||
           html.match(/([0-9]{4}\.[0-9]{2}\.[0-9]{2}\s+[0-9]{2}:[0-9]{2})/i);
         if (dateMatch) {
           published = dateMatch[1].split('T')[0].split(' ')[0].replace(/\./g, '-');
@@ -104,19 +115,19 @@ export async function POST(req: Request) {
 
     let raw = rawContent;
 
-    // 미디어 태그, 폰트사이즈 조절 영역, 사진 캡션 등 노이즈 정제
+    // 미디어 태그, 사진 박스, 스크립트, 광고 노이즈 제거
     raw = raw.replace(/<!--[\s\S]*?-->/g, '');
     raw = raw.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     raw = raw.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
     raw = raw.replace(/<figure\b[^<]*(?:(?!<\/figure>)<[^<]*)*<\/figure>/gi, '');
     raw = raw.replace(/<figcaption\b[^<]*(?:(?!<\/figcaption>)<[^<]*)*<\/figcaption>/gi, '');
-    raw = raw.replace(/<em\b[^<]*(?:(?!<\/em>)<[^<]*)*<\/em>/gi, '');
-    raw = raw.replace(/<table\b[^<]*(?:(?!<\/table>)<[^<]*)*<\/table>/gi, ''); // NDSoft 내부 사진 테이블
+    raw = raw.replace(/<table\b[^<]*(?:(?!<\/table>)<[^<]*)*<\/table>/gi, ''); // NDSoft 사진 및 캡션 테이블 제거
     raw = raw.replace(/<img[^>]*>/gi, '');
-    raw = raw.replace(/<\/(p|div|section|article|header|aside|li)>/gi, '\n');
-    raw = raw.replace(/<(p|div|section|article|header|aside|li)[^>]*>/gi, '');
+    
+    // 줄바꿈 태그 변환
+    raw = raw.replace(/<\/(p|div|section|article|header|aside|li|tr|h[1-6])>/gi, '\n');
+    raw = raw.replace(/<(p|div|section|article|header|aside|li|tr|h[1-6])[^>]*>/gi, '');
     raw = raw.replace(/<br\s*[\/]?>/gi, '\n');
-    raw = raw.replace(/<h[1-4][^>]*>(.*?)<\/h[1-4]>/gi, '\n### $1\n');
     raw = raw.replace(/<[^>]+>/g, '');
 
     // 특수 불릿 줄바꿈 분리
@@ -139,27 +150,28 @@ export async function POST(req: Request) {
         line.includes('무단전재') ||
         line.includes('무단 전재') ||
         line.includes('재배포 금지') ||
+        line.includes('재배포금지') ||
         line.includes('All rights reserved') ||
         line.includes('네이버에서') ||
         line.includes('구독해주세요') ||
         line.includes('사진=') ||
         line.includes('출처=') ||
+        line.includes('@jejusori.net') ||
         line.includes('@') ||
         line.length < 2
       ) {
         continue;
       }
 
-      // 상단 부제목 추출
+      // 기사 최상단 부제목 추출
       if (
         parsingSubhead &&
-        (line.startsWith('‘') || line.startsWith('“') || line.startsWith('-') || line.startsWith('·') || line.length <= 45) &&
-        !line.endsWith('다.') &&
+        (line.startsWith('‘') || line.startsWith('“') || line.startsWith('-') || line.startsWith('·') || line.startsWith('###') || (line.length <= 45 && !line.endsWith('다.'))) &&
         !line.startsWith('●') &&
         line !== title &&
-        subheadings.length < 3
+        subheadings.length < 2
       ) {
-        subheadings.push(line.replace(/^[·\-\s]+/, ''));
+        subheadings.push(line.replace(/^[·\-\s#]+/, ''));
         continue;
       } else {
         parsingSubhead = false;
@@ -167,7 +179,6 @@ export async function POST(req: Request) {
 
       // 중간 소제목 감지
       if (
-        line.startsWith('### ') || 
         line.startsWith('●') || 
         line.startsWith('■') || 
         line.startsWith('◇') || 
@@ -175,7 +186,7 @@ export async function POST(req: Request) {
         line.startsWith('▶') ||
         (line.length <= 35 && !line.endsWith('다.') && !line.endsWith('까?') && !line.endsWith('요.'))
       ) {
-        const cleanSub = line.replace(/^###\s*|^[●■◇◆▶\s]+/, '');
+        const cleanSub = line.replace(/^[●■◇◆▶\s]+/, '');
         formattedParagraphs.push(`<h3>● ${cleanSub}</h3>`);
       } else {
         formattedParagraphs.push(`<p>${line}</p>`);
