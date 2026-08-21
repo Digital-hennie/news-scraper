@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     let published = new Date().toISOString().split('T')[0];
     let source = '';
 
-    // 1. 직접 HTML Fetch
+    // 1. 직접 HTML Fetch (네이버 모바일/PC 및 전 언론사 공통)
     try {
       const response = await fetch(url, {
         headers: {
@@ -31,10 +31,10 @@ export async function POST(req: Request) {
 
         // 1-1. 제목 추출
         const titleMatch =
-          html.match(/<h3[^>]*class="heading"[^>]*>([\s\S]*?)<\/h3>/i) ||
-          html.match(/<div[^>]*class="article-head-title"[^>]*>([\s\S]*?)<\/div>/i) ||
           html.match(/<h2[^>]*id="title_area"[^>]*>([\s\S]*?)<\/h2>/i) ||
+          html.match(/<h2[^>]*class="media_end_head_headline"[^>]*>([\s\S]*?)<\/h2>/i) ||
           html.match(/<h1[^>]*class="[^"]*article-head__title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ||
+          html.match(/<h3[^>]*class="heading"[^>]*>([\s\S]*?)<\/h3>/i) ||
           html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) ||
           html.match(/<title>([\s\S]*?)<\/title>/i);
 
@@ -47,25 +47,38 @@ export async function POST(req: Request) {
             .trim();
         }
 
-        // 1-2. 대표 이미지 추출
+        // 1-2. 대표 이미지 추출 (og:image 우선)
         const imgMatch =
           html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i) ||
           html.match(/<meta\s+name="twitter:image"\s+content="([^"]+)"/i);
-        if (imgMatch && imgMatch[1].startsWith('http') && !imgMatch[1].includes('favicon')) {
+        if (imgMatch && imgMatch[1].startsWith('http') && !imgMatch[1].includes('favicon') && !imgMatch[1].includes('default')) {
           imageUrl = imgMatch[1];
         }
 
-        // 1-3. 본문 컨테이너 추출 (NDSoft, 네이버, 다음 등)
-        const ndsoftMatch = html.match(/<div[^>]*id="article-view-content-div"[^>]*>([\s\S]*?)<\/div>\s*<(div|section)[^>]*id="(detail-ad|view-copyright)/i) ||
-                           html.match(/<div[^>]*id="article-view-content-div"[^>]*>([\s\S]*?)<\/div>/i);
-        if (ndsoftMatch) {
-          rawContent = ndsoftMatch[1];
+        // 1-3. 본문 컨테이너 안전 추출
+        // ① 네이버 모바일/PC 본문 (#dic_area, #newsct_article)
+        const naverMatch =
+          html.match(/<article[^>]*id="dic_area"[^>]*>([\s\S]*?)<\/article>/i) ||
+          html.match(/<div[^>]*id="newsct_article"[^>]*>([\s\S]*?)<\/div>/i) ||
+          html.match(/<div[^>]*id="articleBodyContents"[^>]*>([\s\S]*?)<\/div>/i);
+        
+        if (naverMatch) {
+          rawContent = naverMatch[1];
         }
 
+        // ② NDSoft 계열 (제주의소리 등)
+        if (!rawContent) {
+          const ndsoftIdx = html.indexOf('id="article-view-content-div"');
+          if (ndsoftIdx !== -1) {
+            const cut = html.substring(ndsoftIdx);
+            const endIdx = cut.indexOf('class="article-view-copyright"');
+            rawContent = endIdx !== -1 ? cut.substring(0, endIdx) : cut.substring(0, 20000);
+          }
+        }
+
+        // ③ 기타 일반 언론사 (조선일보, 다음 등)
         if (!rawContent) {
           const bodyMatch =
-            html.match(/<article[^>]*id="dic_area"[^>]*>([\s\S]*?)<\/article>/i) ||
-            html.match(/<div[^>]*id="newsct_article"[^>]*>([\s\S]*?)<\/div>/i) ||
             html.match(/<section[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/section>/i) ||
             html.match(/<div[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
             html.match(/<div[^>]*class="[^"]*article_view[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
@@ -78,10 +91,11 @@ export async function POST(req: Request) {
 
         // 1-4. 날짜 추출
         const dateMatch =
-          html.match(/승인\s*([0-9]{4}\.[0-9]{2}\.[0-9]{2})/i) ||
           html.match(/data-date-time="([^"]+)"/i) ||
+          html.match(/<span[^>]*class="media_end_head_info_datestamp_time"[^>]*>([^<]+)<\/span>/i) ||
           html.match(/<meta\s+property="article:published_time"\s+content="([^"]+)"/i) ||
-          html.match(/([0-9]{4}\.[0-9]{2}\.[0-9]{2}\s+[0-9]{2}:[0-9]{2})/i);
+          html.match(/승인\s*([0-9]{4}\.[0-9]{2}\.[0-9]{2})/i);
+        
         if (dateMatch) {
           published = dateMatch[1].split('T')[0].split(' ')[0].replace(/\./g, '-');
         }
@@ -90,7 +104,7 @@ export async function POST(req: Request) {
       console.warn('Fetch error:', fetchErr);
     }
 
-    // 2. Fallback
+    // 2. 라이브러리 Fallback
     if (!rawContent || rawContent.length < 80) {
       const article = await extract(url);
       if (article) {
@@ -108,27 +122,29 @@ export async function POST(req: Request) {
 
     let raw = rawContent;
 
-    // 미디어 태그, 캡션 박스, 스크립트, 광고 노이즈 제거[cite: 1]
+    // 미디어 태그, 사진 캡션(em.img_desc), 스크립트, 광고 노이즈 제거
     raw = raw.replace(/<!--[\s\S]*?-->/g, '');
     raw = raw.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     raw = raw.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
     raw = raw.replace(/<figure\b[^<]*(?:(?!<\/figure>)<[^<]*)*<\/figure>/gi, '');
     raw = raw.replace(/<figcaption\b[^<]*(?:(?!<\/figcaption>)<[^<]*)*<\/figcaption>/gi, '');
+    raw = raw.replace(/<em\b[^<]*(?:(?!<\/em>)<[^<]*)*<\/em>/gi, '');
     raw = raw.replace(/<table\b[^<]*(?:(?!<\/table>)<[^<]*)*<\/table>/gi, '');
+    raw = raw.replace(/<span[^>]*class="[^"]*end_photo_org[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
     raw = raw.replace(/<img[^>]*>/gi, '');
 
-    // 줄바꿈 태그 변환[cite: 1]
+    // 줄바꿈 태그 치환
     raw = raw.replace(/<\/(p|div|section|article|header|aside|li|tr|h[1-6])>/gi, '\n');
     raw = raw.replace(/<(p|div|section|article|header|aside|li|tr|h[1-6])[^>]*>/gi, '');
     raw = raw.replace(/<br\s*[\/]?>/gi, '\n');
-    
-    // 혹시 남아있는 모든 HTML 태그 및 덜 닫힌 태그 조각 완전 제거[cite: 1]
-    raw = raw.replace(/<[^>]*>/g, '');
+    raw = raw.replace(/<[^>]+>/g, '');
+
+    // 태그 속성 잔여물 정리
     raw = raw.replace(/id="[^"]*"/gi, '');
     raw = raw.replace(/class="[^"]*"/gi, '');
     raw = raw.replace(/itemprop="[^"]*"/gi, '');
 
-    // 특수 불릿 줄바꿈 분리[cite: 1]
+    // 특수 불릿 줄바꿈 분리
     raw = raw.replace(/([^\n])\s*([●■◆▲▶])\s*/g, '$1\n$2 ');
 
     const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -140,22 +156,16 @@ export async function POST(req: Request) {
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
 
-      // 저작권, 기자 서명, 네비게이션, 포털 반응(좋아요 등) 문구 필터링[cite: 1]
+      // 저작권, 기자 서명, 포털 반응 노이즈 필터링
       if (
         line.includes('article-view') ||
         line.includes('articleBody') ||
         line.includes('글자크기 설정') ||
-        line.includes('좋아요') ||
-        line.includes('훈훈해요') ||
-        line.includes('슬퍼요') ||
-        line.includes('화나요') ||
-        line.includes('다른기사 보기') ||
-        line.includes('개의 댓글') ||
         line.includes('기자 =') ||
         line.includes('기자=') ||
-        line.includes('기자') && line.length < 10 ||
-        line.includes('무단전재') ||
+        line.includes('기자의 다른 기사') ||
         line.includes('무단 전재') ||
+        line.includes('무단전재') ||
         line.includes('재배포 금지') ||
         line.includes('재배포금지') ||
         line.includes('All rights reserved') ||
@@ -163,19 +173,16 @@ export async function POST(req: Request) {
         line.includes('구독해주세요') ||
         line.includes('사진=') ||
         line.includes('출처=') ||
-        line.includes('@jejusori.net') ||
         line.includes('@') ||
-        line.startsWith('작성자') ||
-        line === '●' ||
         line.length < 2
       ) {
         continue;
       }
 
-      // 기사 최상단 부제목 추출[cite: 1]
+      // 기사 최상단 부제목 추출
       if (
         parsingSubhead &&
-        (line.startsWith('‘') || line.startsWith('“') || line.startsWith('-') || line.startsWith('·') || line.startsWith('###') || line.startsWith('●') || (line.length <= 45 && !line.endsWith('다.'))) &&
+        (line.startsWith('‘') || line.startsWith('“') || line.startsWith('-') || line.startsWith('·') || line.startsWith('###') || line.startsWith('●') || (line.length <= 40 && !line.endsWith('다.'))) &&
         line !== title &&
         subheadings.length < 2
       ) {
@@ -185,7 +192,7 @@ export async function POST(req: Request) {
         parsingSubhead = false;
       }
 
-      // 본문 중간 소제목 감지[cite: 1]
+      // 본문 중간 소제목 감지
       if (
         line.startsWith('●') || 
         line.startsWith('■') || 
