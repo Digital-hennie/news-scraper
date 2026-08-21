@@ -44,7 +44,7 @@ export default function Home() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [showGuideModal, setShowGuideModal] = useState(false);
-  const [showDonateModal, setShowDonateModal] = useState(false);
+  const [showCoffeeModal, setShowCoffeeModal] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -140,7 +140,7 @@ export default function Home() {
     );
   };
 
-  // Auto-packing
+  // 1페이지당 기사 자동 분할 알고리즘
   const pages: Article[][] = useMemo(() => {
     if (articles.length === 0) return [];
 
@@ -148,13 +148,13 @@ export default function Home() {
     let currentBatch: Article[] = [];
     let currentScore = 0;
 
-    const PAGE_CAPACITY = 2900;
-    const SINGLE_ARTICLE_THRESHOLD = 2400;
+    const PAGE_CAPACITY = 3400;
+    const SINGLE_ARTICLE_THRESHOLD = 2600;
 
     for (let i = 0; i < articles.length; i++) {
       const art = articles[i];
       const plainText = art.content.replace(/<[^>]+>/g, '');
-      const score = plainText.length + (art.image ? 200 : 0) + ((art.subheading?.length || 0) * 1.2);
+      const score = plainText.length + (art.image ? 180 : 0) + ((art.subheading?.length || 0) * 1.1);
 
       if (score >= SINGLE_ARTICLE_THRESHOLD) {
         if (currentBatch.length > 0) {
@@ -166,9 +166,10 @@ export default function Home() {
         continue;
       }
 
+      // 최대 3개까지 한 페이지에 깔끔하게 배치
       if (
         (currentScore + score > PAGE_CAPACITY && currentBatch.length >= 2) ||
-        currentBatch.length >= 4
+        currentBatch.length >= 3
       ) {
         result.push(currentBatch);
         currentBatch = [art];
@@ -189,10 +190,6 @@ export default function Home() {
   const safeCurrentPage = Math.min(currentPage, Math.max(0, pages.length - 1));
   const activePageArticles = pages[safeCurrentPage] || [];
 
-  const totalCharsOnPage = useMemo(() => {
-    return activePageArticles.reduce((acc, art) => acc + art.content.replace(/<[^>]+>/g, '').length, 0);
-  }, [activePageArticles]);
-
   return (
     <div className="min-h-screen bg-neutral-100 flex flex-col items-center py-6 px-4 font-sans relative">
       <style jsx global>{`
@@ -205,32 +202,35 @@ export default function Home() {
 
         .newspaper-text p {
           text-indent: 0.9em;
-          margin-bottom: 0.35em;
+          margin-bottom: 0.28em;
           text-align: justify;
           word-break: keep-all;
           overflow-wrap: break-word;
         }
 
         .newspaper-text h3 {
+          display: block;
+          width: 100%;
           font-weight: 800;
-          margin-top: 0.6em;
-          margin-bottom: 0.3em;
+          margin-top: 0.45em;
+          margin-bottom: 0.2em;
           color: #0f172a;
-          line-height: 1.35;
-          font-size: 0.9em;
+          line-height: 1.3;
+          font-size: 0.88em;
           text-indent: 0 !important;
+          text-align: left !important;
           break-after: avoid;
         }
       `}</style>
 
-      {/* 헤더 */}
+      {/* 상단 헤더 바 */}
       <header className="w-full max-w-7xl mb-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-xl shadow-sm border border-neutral-200">
         <div className="flex items-center gap-2">
           <Newspaper className="w-5 h-5 text-neutral-800" />
           <h1 className="text-lg font-bold text-neutral-800">신문 기사 아카이브 및 A4조판 서비스 페이지 @Digital-Hennie</h1>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-2">
           {/* 이용방법 안내 버튼 */}
           <button
             onClick={() => setShowGuideModal(true)}
@@ -240,171 +240,63 @@ export default function Home() {
             <span>이용방법 안내</span>
           </button>
 
-          {/* 카카오페이 커피 후원 모달 버튼 */}
+          {/* 개발자 커피 후원 버튼 */}
           <button
-            onClick={() => setShowDonateModal(true)}
-            className="flex items-center gap-1.5 bg-[#FEE500] text-[#191919] border border-amber-300 px-3 py-2 rounded-lg hover:bg-yellow-400 transition-colors shadow-sm font-medium text-xs cursor-pointer"
+            onClick={() => setShowCoffeeModal(true)}
+            className="flex items-center gap-1.5 bg-amber-400 text-amber-950 font-bold px-3 py-2 rounded-lg hover:bg-amber-500 transition-colors shadow-sm text-xs cursor-pointer"
           >
-            <Coffee className="w-3.5 h-3.5 text-amber-900" />
+            <Coffee className="w-3.5 h-3.5 text-amber-950" />
             <span>개발자 커피 후원</span>
           </button>
 
-          {/* PDF 인쇄 버튼 */}
+          {/* PDF 인쇄/저장 버튼 */}
           <button
             onClick={() => handlePrint()}
             disabled={activePageArticles.length === 0}
             className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg hover:bg-neutral-800 disabled:bg-neutral-300 transition-colors shadow-sm font-medium text-xs cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
-            현재 페이지 PDF 인쇄/저장
+            <span>현재 페이지 PDF 인쇄/저장</span>
           </button>
         </div>
       </header>
 
-      {/* 카카오페이 QR 후원 모달 */}
-      {showDonateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-neutral-100 animate-in fade-in zoom-in-95 duration-150 flex flex-col items-center text-center">
-            <div className="w-full flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
-                  <Coffee className="w-4 h-4 text-amber-700" />
-                </div>
-                <h2 className="text-sm font-bold text-neutral-900">개발자에게 커피 한 잔</h2>
-              </div>
-              <button
-                onClick={() => setShowDonateModal(false)}
-                className="text-neutral-400 hover:text-neutral-700 p-1.5 rounded-lg hover:bg-neutral-100 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-neutral-600 leading-relaxed mb-4 text-left">
-              본 서비스가 유용하셨다면 따뜻한 커피 한 잔을 후원해 주세요. 더 쾌적한 아카이브 환경을 만드는 데 큰 힘이 됩니다. ☕
-            </p>
-
-            {/* QR 이미지 컨테이너 */}
-            <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-3.5 mb-4 flex flex-col items-center justify-center w-full shadow-inner">
-              <div className="w-48 h-48 bg-white border border-neutral-200 rounded-xl overflow-hidden flex items-center justify-center shadow-xs">
-                <img
-                  src="/kakaopay-qr.png"
-                  alt="카카오페이 송금 QR"
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                    const parent = (e.target as HTMLElement).parentElement;
-                    if (parent) {
-                      parent.innerHTML = '<span class="text-xs text-neutral-400 p-3 leading-relaxed">public 폴더에<br/>kakaopay-qr.png 이미지를 넣어주세요</span>';
-                    }
-                  }}
-                />
-              </div>
-              <span className="text-[11px] font-medium text-neutral-500 mt-2.5">
-                카카오톡 [송금] 렌즈 또는 기본 카메라로 스캔
-              </span>
-            </div>
-
-            <button
-              onClick={() => setShowDonateModal(false)}
-              className="w-full bg-neutral-900 text-white py-2.5 rounded-xl text-xs font-medium hover:bg-neutral-800 transition-colors cursor-pointer"
-            >
-              닫기
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 이용방법 모달 팝업 */}
+      {/* 이용방법 안내 모달 */}
       {showGuideModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-neutral-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-neutral-100 pb-3.5 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-neutral-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
-                  <HelpCircle className="w-4 h-4 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-neutral-900">서비스 이용 가이드</h2>
-                  <p className="text-[11px] text-neutral-400">편리한 신문 기사 아카이빙을 위한 안내</p>
-                </div>
+                <HelpCircle className="w-5 h-5 text-blue-600" />
+                <h2 className="text-base font-bold text-neutral-900">서비스 이용안내 및 주의사항</h2>
               </div>
-              <button
-                onClick={() => setShowGuideModal(false)}
-                className="text-neutral-400 hover:text-neutral-700 p-1.5 rounded-lg hover:bg-neutral-100 transition-colors cursor-pointer"
-              >
+              <button onClick={() => setShowGuideModal(false)} className="text-neutral-400 hover:text-neutral-700 p-1 rounded-lg hover:bg-neutral-100">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3.5 text-xs leading-relaxed text-neutral-600">
-              {/* 1. 이용방법 순서 */}
-              <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 text-neutral-800">
-                <p className="font-bold text-blue-950 mb-2 flex items-center gap-1.5 text-[13px]">
-                  <span>📖</span>
-                  <span>이용방법</span>
-                </p>
-                <ol className="space-y-1.5 list-none font-medium">
-                  <li className="flex items-start gap-1.5">
-                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">1</span>
-                    <span>스크랩하고 싶은 뉴스의 페이지 주소(URL)를 추가하여 주세요. (개별 언론사페이지보다 네이버와 같은 포털 내 뉴스페이지를 이용하시면 더욱 안정적으로 적용됩니다.)</span>
-                  </li>
-                  <li className="flex items-start gap-1.5">
-                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">2</span>
-                    <span>기사 길이에 따라 한 페이지에 최대 4건까지 배치됩니다.</span>
-                  </li>
-                  <li className="flex items-start gap-1.5">
-                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">3</span>
-                    <span>스크랩 목록에서 스크랩한 기사의 순서를 바꾸면 기사 배열 순서가 함께 바뀝니다.</span>
-                  </li>
-                  <li className="flex items-start gap-1.5">
-                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">4</span>
-                    <span>원하는 페이지가 완성되면 우측 상단의 <strong>[현재 페이지 PDF 인쇄/저장]</strong> 버튼을 눌러 저장 또는 인쇄합니다.</span>
-                  </li>
-                </ol>
+              <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3.5">
+                <p className="font-bold text-neutral-900 mb-1">📌 비상업적 개인 프로젝트 안내</p>
+                <p>본 서비스는 <strong>Digital-Hennie</strong>가 자발적으로 만든 <strong>비상업적 조판 도구</strong>입니다. 마음껏 이용하시되 상업적으로 이용하지 말아주세요.</p>
               </div>
 
-              {/* 2. 비상업적 무료 프로젝트 안내 */}
-              <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-3.5">
-                <p className="font-semibold text-neutral-800 mb-1 flex items-center gap-1.5">
-                  <span>☕</span>
-                  <span>비상업적 무료 프로젝트 안내</span>
-                </p>
-                <p className="text-neutral-600 leading-normal">
-                  본 서비스는 <strong>Digital-Hennie</strong>가 개인적인 필요와 스크랩 편의를 위해 자발적으로 만든 <strong>비상업적 아카이브 도구</strong>입니다. 학습, 연구, 개인 보관용으로 자유롭게 이용해 주시되, <strong>상업적 용도로의 무단 전재 및 활용은 삼가</strong>해 주시기 바랍니다.
-                </p>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3.5 text-blue-900">
+                <p className="font-bold mb-1">💡 기사 본문 불러오기 오류 팁</p>
+                <p>일부 언론사의 경우 보안 정책으로 본문 스크랩이 원활하지 않을 수 있습니다. 이때는 <strong>'네이버 뉴스'</strong> 검색 결과 링크를 통해 불러오시면 안정적으로 등록됩니다.</p>
               </div>
 
-              {/* 3. 기사 추출 팁 */}
-              <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3.5 text-blue-950">
-                <p className="font-semibold mb-1 flex items-center gap-1.5">
-                  <span>💡</span>
-                  <span>기사 본문이 잘 불러와지지 않을 때</span>
-                </p>
-                <p className="leading-normal">
-                  일부 언론사 웹페이지의 보안 정책이나 구조적 제약으로 본문 추출이 원활하지 않을 수 있습니다. 이 경우 해당 기사의 <strong>'네이버 뉴스' 페이지 링크</strong>를 복사해 입력해 주시면 훨씬 안정적으로 기사가 조판됩니다.
-                </p>
-              </div>
-
-              {/* 4. 문의 및 피드백 */}
-              <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-3.5 text-amber-950">
-                <p className="font-semibold mb-1 flex items-center gap-1.5">
-                  <span>💬</span>
-                  <span>소중한 의견과 아이디어를 들려주세요</span>
-                </p>
-                <p className="leading-normal">
-                  서비스를 이용하시면서 느끼신 개선점이나 더 좋은 레이아웃 아이디어가 있다면 언제든 편하게 메일로 전해 주세요. 여러분의 피드백으로 더 읽기 좋은 서비스를 만들어가겠습니다.
-                </p>
-                <p className="font-medium mt-1 text-[11px] text-amber-800">
-                  문의처: <a href="mailto:artmkt@naver.com" className="underline underline-offset-2">artmkt@naver.com</a>
-                </p>
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3.5 text-amber-900">
+                <p className="font-bold mb-1">💬 의견 및 개선 아이디어</p>
+                <p>이용하시면서 더 좋은 개선 아이디어나 의견이 생기면 언제든 메일로 연락해 주세요.</p>
+                <p className="font-semibold mt-1">📧 <a href="mailto:artmk@naver.com" className="underline">artmk@naver.com</a></p>
               </div>
             </div>
 
             <div className="mt-5 flex justify-end">
               <button
                 onClick={() => setShowGuideModal(false)}
-                className="bg-neutral-900 text-white px-4 py-2 rounded-xl text-xs font-medium hover:bg-neutral-800 transition-colors cursor-pointer"
+                className="bg-neutral-900 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
               >
                 닫기
               </button>
@@ -413,8 +305,54 @@ export default function Home() {
         </div>
       )}
 
+      {/* 개발자 커피 후원 모달 */}
+      {showCoffeeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-neutral-200 text-center">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-neutral-900 flex items-center gap-1.5 text-sm">
+                <Coffee className="w-4 h-4 text-amber-500" />
+                개발자에게 커피 한 잔 후원하기
+              </h3>
+              <button onClick={() => setShowCoffeeModal(false)} className="text-neutral-400 hover:text-neutral-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-600 mb-4 leading-relaxed">
+              더 나은 서비스 개발과 지속적인 서버 유지 관리에 큰 힘이 됩니다. 감사합니다! ☕
+            </p>
+
+            <div className="flex justify-center mb-4">
+              <div className="p-2 border border-neutral-200 rounded-xl bg-neutral-50 shadow-inner">
+                <img
+                  src="/kakaopay-qr.png"
+                  alt="카카오페이 후원 QR코드"
+                  className="w-48 h-48 object-contain rounded-lg"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                    const parent = (e.target as HTMLElement).parentElement;
+                    if (parent) {
+                      parent.innerHTML = '<div class="w-48 h-48 flex items-center justify-center text-xs text-neutral-400 text-center p-2">public/kakaopay-qr.png<br/>이미지를 확인해주세요</div>';
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowCoffeeModal(false)}
+              className="w-full bg-neutral-900 text-white py-2 rounded-xl text-xs font-semibold hover:bg-neutral-800 transition-colors"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 메인 작업 영역 */}
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* 좌측 패널 */}
+        {/* 좌측 패널: URL 추가 및 목록 관리 */}
         <div className="lg:col-span-4 flex flex-col gap-3">
           <form onSubmit={handleAddArticle} className="bg-white p-3 rounded-xl shadow-sm border border-neutral-200 flex flex-col gap-2">
             <label className="text-[11px] font-semibold text-neutral-500 tracking-wide uppercase">신문 기사 URL 추가</label>
@@ -496,7 +434,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 우측: A4 뷰어 */}
+        {/* 우측: A4 뷰어 & 인쇄 영역 */}
         <div className="lg:col-span-8 flex flex-col items-center gap-3">
           <div className="w-full flex justify-center overflow-x-auto p-1">
             <div
@@ -507,7 +445,7 @@ export default function Home() {
                 height: '297mm',
                 minWidth: '210mm',
                 minHeight: '297mm',
-                padding: '9mm 11mm',
+                padding: '8mm 11mm',
               }}
             >
               {/* 마스트헤드 */}
@@ -517,122 +455,208 @@ export default function Home() {
                 <p className="text-[8px] text-neutral-500">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
               </div>
 
-              {/* 기사 컨테이너 */}
-              <div className="flex-1 flex flex-col gap-2.5 overflow-hidden">
+              {/* 기사 렌더링 컨테이너 */}
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                 {activePageArticles.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-neutral-300 newspaper-font text-xs">
                     배치된 기사가 없습니다.
                   </div>
                 ) : (
-                  <div 
-                    className={`h-full w-full flex ${
-                      activePageArticles.length <= 2 ? 'flex-col' : 'grid grid-cols-2 grid-rows-2'
-                    } gap-2.5 overflow-hidden`}
-                  >
-                    {activePageArticles.map((art) => {
-                      const count = activePageArticles.length;
-                      const plainLen = art.content.replace(/<[^>]+>/g, '').length;
-                      const flexWeight = count === 2 ? Math.max(1, Math.round(plainLen / 180)) : 1;
+                  <div className="h-full w-full flex flex-col gap-2 overflow-hidden">
+                    {/* 기사가 3개일 때: 상단 2개 (좌/우 분할) + 하단 1개 (전면 너비) */}
+                    {activePageArticles.length === 3 ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-3 flex-1 overflow-hidden min-h-0 border-b border-neutral-300 pb-2">
+                          {activePageArticles.slice(0, 2).map((art) => {
+                            const formattedDate = formatShortDate(art.published);
+                            return (
+                              <article key={art.id} className="flex flex-col overflow-hidden min-h-0">
+                                <div className="flex items-baseline gap-1 mb-0.5 flex-wrap">
+                                  <h3
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => handleContentEdit(art.id, 'title', e.currentTarget.innerText)}
+                                    className="newspaper-font font-bold text-neutral-950 leading-tight outline-none focus:bg-neutral-50 tracking-tight inline text-[0.88rem]"
+                                  >
+                                    {art.title}
+                                  </h3>
+                                  {formattedDate && (
+                                    <span className="text-[7.5px] text-neutral-500 font-normal newspaper-font">
+                                      ({formattedDate})
+                                    </span>
+                                  )}
+                                </div>
 
-                      let fontSize = '0.78rem';
-                      let lineHeight = '1.58';
-                      let titleSize = '1.15rem';
+                                {art.subheading && (
+                                  <div
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
+                                    className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-1.5 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.68rem] leading-snug"
+                                  >
+                                    {art.subheading}
+                                  </div>
+                                )}
 
-                      if (count === 1) {
-                        fontSize = totalCharsOnPage < 1300 ? '0.86rem' : '0.80rem';
-                        lineHeight = '1.65';
-                        titleSize = '1.32rem';
-                      } else if (count === 2) {
-                        fontSize = totalCharsOnPage < 1700 ? '0.81rem' : '0.76rem';
-                        lineHeight = '1.55';
-                        titleSize = '1.10rem';
-                      } else {
-                        fontSize = '0.70rem';
-                        lineHeight = '1.42';
-                        titleSize = '0.92rem';
-                      }
+                                <div className="newspaper-font newspaper-text flex-1 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden text-[0.72rem] leading-[1.42]">
+                                  {art.image && (
+                                    <div className="float-right ml-2 mb-1 p-0.5 border border-neutral-200 bg-white max-w-[85px]">
+                                      <img
+                                        src={art.image}
+                                        alt="기사 사진"
+                                        className="w-full h-auto object-contain block max-h-24"
+                                      />
+                                    </div>
+                                  )}
+                                  <div
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => handleContentEdit(art.id, 'content', e.currentTarget.innerHTML)}
+                                    dangerouslySetInnerHTML={{ __html: art.content }}
+                                  />
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
 
-                      const formattedDate = formatShortDate(art.published);
-                      const columnClass = count <= 2 ? 'columns-2 gap-4' : 'columns-1';
+                        {/* 하단 3번째 기사: 전면 가로 2단 배치 */}
+                        {activePageArticles[2] && (() => {
+                          const art = activePageArticles[2];
+                          const formattedDate = formatShortDate(art.published);
+                          return (
+                            <article key={art.id} className="flex flex-col flex-1 overflow-hidden min-h-0 pt-0.5">
+                              <div className="flex items-baseline gap-1 mb-0.5 flex-wrap">
+                                <h3
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => handleContentEdit(art.id, 'title', e.currentTarget.innerText)}
+                                  className="newspaper-font font-bold text-neutral-950 leading-tight outline-none focus:bg-neutral-50 tracking-tight inline text-[0.92rem]"
+                                >
+                                  {art.title}
+                                </h3>
+                                {formattedDate && (
+                                  <span className="text-[7.5px] text-neutral-500 font-normal newspaper-font">
+                                    ({formattedDate})
+                                  </span>
+                                )}
+                              </div>
 
-                      return (
-                        <article
-                          key={art.id}
-                          style={{ flex: `${flexWeight} 1 0%` }}
-                          className="flex flex-col border-b border-neutral-300 pb-2 last:border-b-0 overflow-hidden min-h-0"
-                        >
-                          {/* 1. 대제목 + 게재일 */}
-                          <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                            <h3
-                              contentEditable
-                              suppressContentEditableWarning
-                              onBlur={(e) => handleContentEdit(art.id, 'title', e.currentTarget.innerText)}
-                              className="newspaper-font font-bold text-neutral-950 leading-snug outline-none focus:bg-neutral-50 tracking-tight inline"
-                              style={{ fontSize: titleSize }}
-                            >
-                              {art.title}
-                            </h3>
-                            {formattedDate && (
-                              <span className="text-[8px] text-neutral-500 font-normal tracking-normal newspaper-font">
-                                ({formattedDate})
-                              </span>
-                            )}
-                          </div>
+                              {art.subheading && (
+                                <div
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
+                                  className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-1.5 py-0.5 mb-1 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.70rem] leading-snug"
+                                >
+                                  {art.subheading}
+                                </div>
+                              )}
 
-                          {/* 2. 부제목 박스 */}
-                          {art.subheading && (
-                            <div
-                              contentEditable
-                              suppressContentEditableWarning
-                              onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
-                              className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-2 py-0.5 mb-1.5 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight"
-                              style={{ fontSize: '0.73rem', lineHeight: '1.35' }}
-                            >
-                              {art.subheading}
-                            </div>
-                          )}
-
-                          {/* 3. 본문 2단 조판 + 플로팅 이미지 */}
-                          <div 
-                            className={`newspaper-font newspaper-text flex-1 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden ${columnClass}`}
-                            style={{ fontSize, lineHeight }}
-                          >
-                            {art.image && (
-                              <div 
-                                className="float-right ml-2.5 mb-1.5 p-0.5 border border-neutral-200 bg-white"
-                                style={{ maxWidth: count <= 2 ? '110px' : '90px' }}
-                              >
-                                <img
-                                  src={art.image}
-                                  alt="기사 사진"
-                                  className="w-full h-auto object-contain block max-h-36"
+                              <div className="newspaper-font newspaper-text flex-1 columns-2 gap-3 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden text-[0.73rem] leading-[1.45]">
+                                {art.image && (
+                                  <div className="float-right ml-2 mb-1 p-0.5 border border-neutral-200 bg-white max-w-[90px]">
+                                    <img
+                                      src={art.image}
+                                      alt="기사 사진"
+                                      className="w-full h-auto object-contain block max-h-24"
+                                    />
+                                  </div>
+                                )}
+                                <div
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => handleContentEdit(art.id, 'content', e.currentTarget.innerHTML)}
+                                  dangerouslySetInnerHTML={{ __html: art.content }}
                                 />
+                              </div>
+                            </article>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      /* 기사가 1개 또는 2개일 때의 조판 */
+                      activePageArticles.map((art) => {
+                        const count = activePageArticles.length;
+                        const formattedDate = formatShortDate(art.published);
+                        const fontSize = count === 1 ? '0.80rem' : '0.75rem';
+                        const lineHeight = count === 1 ? '1.58' : '1.48';
+                        const titleSize = count === 1 ? '1.25rem' : '1.05rem';
+
+                        return (
+                          <article
+                            key={art.id}
+                            className="flex flex-col flex-1 border-b border-neutral-300 pb-2 last:border-b-0 overflow-hidden min-h-0"
+                          >
+                            <div className="flex items-baseline gap-2 mb-0.5 flex-wrap">
+                              <h3
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => handleContentEdit(art.id, 'title', e.currentTarget.innerText)}
+                                className="newspaper-font font-bold text-neutral-950 leading-snug outline-none focus:bg-neutral-50 tracking-tight inline"
+                                style={{ fontSize: titleSize }}
+                              >
+                                {art.title}
+                              </h3>
+                              {formattedDate && (
+                                <span className="text-[8px] text-neutral-500 font-normal newspaper-font">
+                                  ({formattedDate})
+                                </span>
+                              )}
+                            </div>
+
+                            {art.subheading && (
+                              <div
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => handleContentEdit(art.id, 'subheading', e.currentTarget.innerText)}
+                                className="newspaper-font font-semibold text-neutral-700 bg-neutral-50 border-l-2 border-neutral-500 px-2 py-0.5 mb-1.5 outline-none focus:bg-neutral-100 whitespace-pre-line tracking-tight text-[0.72rem] leading-snug"
+                              >
+                                {art.subheading}
                               </div>
                             )}
 
-                            <div
-                              contentEditable
-                              suppressContentEditableWarning
-                              onBlur={(e) => handleContentEdit(art.id, 'content', e.currentTarget.innerHTML)}
-                              dangerouslySetInnerHTML={{ __html: art.content }}
-                            />
-                          </div>
-                        </article>
-                      );
-                    })}
+                            <div 
+                              className="newspaper-font newspaper-text flex-1 columns-2 gap-4 text-neutral-800 outline-none focus:bg-neutral-50 overflow-hidden"
+                              style={{ fontSize, lineHeight }}
+                            >
+                              {art.image && (
+                                <div 
+                                  className="float-right ml-2.5 mb-1.5 p-0.5 border border-neutral-200 bg-white"
+                                  style={{ maxWidth: count === 1 ? '115px' : '95px' }}
+                                >
+                                  <img
+                                    src={art.image}
+                                    alt="기사 사진"
+                                    className="w-full h-auto object-contain block max-h-36"
+                                  />
+                                </div>
+                              )}
+
+                              <div
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => handleContentEdit(art.id, 'content', e.currentTarget.innerHTML)}
+                                dangerouslySetInnerHTML={{ __html: art.content }}
+                              />
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
                   </div>
                 )}
               </div>
 
               {/* 푸터 */}
-              <div className="border-t border-neutral-300 pt-1 mt-1 flex justify-between items-center text-[8px] text-neutral-400 newspaper-font">
-                <span>© 2026 Digital-Hennie. All rights reserved. (artmkt@naver.com)</span>
+              <div className="border-t border-neutral-300 pt-1 mt-1 flex justify-between items-center text-[7.5px] text-neutral-400 newspaper-font">
+                <span>© 2026 Digital-Hennie. All rights reserved. (artmk@naver.com)</span>
                 <span>Page {safeCurrentPage + 1}</span>
               </div>
             </div>
           </div>
 
-          {/* 하단 페이지네이션 */}
+          {/* 하단 페이지네이션 컨트롤 */}
           <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-neutral-200">
             <button
               onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
