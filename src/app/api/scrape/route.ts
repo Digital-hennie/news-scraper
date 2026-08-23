@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { extract } from '@extractus/article-extractor';
 
+const SERVER_ACCESS_PASSWORD = '0708';
+
 export async function POST(req: Request) {
   try {
+    // 🔒 비밀번호 잠금 검증
+    const reqPassword = req.headers.get('x-access-password');
+    if (reqPassword !== SERVER_ACCESS_PASSWORD) {
+      return NextResponse.json({ error: '접근 권한이 없습니다. 올바른 비밀번호가 필요합니다.' }, { status: 401 });
+    }
+
     const { url } = await req.json();
     if (!url) {
       return NextResponse.json({ error: 'URL을 입력해주세요.' }, { status: 400 });
@@ -56,7 +64,6 @@ export async function POST(req: Request) {
         }
 
         // 1-3. 본문 컨테이너 안전 추출
-        // ① 네이버 모바일/PC 본문 (#dic_area, #newsct_article)
         const naverMatch =
           html.match(/<article[^>]*id="dic_area"[^>]*>([\s\S]*?)<\/article>/i) ||
           html.match(/<div[^>]*id="newsct_article"[^>]*>([\s\S]*?)<\/div>/i) ||
@@ -66,7 +73,6 @@ export async function POST(req: Request) {
           rawContent = naverMatch[1];
         }
 
-        // ② NDSoft 계열 (제주의소리 등)
         if (!rawContent) {
           const ndsoftIdx = html.indexOf('id="article-view-content-div"');
           if (ndsoftIdx !== -1) {
@@ -76,7 +82,6 @@ export async function POST(req: Request) {
           }
         }
 
-        // ③ 기타 일반 언론사 (조선일보, 다음 등)
         if (!rawContent) {
           const bodyMatch =
             html.match(/<section[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/section>/i) ||
@@ -122,7 +127,7 @@ export async function POST(req: Request) {
 
     let raw = rawContent;
 
-    // 미디어 태그, 사진 캡션(em.img_desc), 스크립트, 광고 노이즈 제거
+    // 미디어 태그 및 노이즈 제거
     raw = raw.replace(/<!--[\s\S]*?-->/g, '');
     raw = raw.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     raw = raw.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
@@ -198,7 +203,7 @@ export async function POST(req: Request) {
         line.startsWith('■') || 
         line.startsWith('◇') || 
         line.startsWith('◆') || 
-        line.startsWith('▶') ||
+        line.startsWith('▶') || 
         (line.length <= 35 && !line.endsWith('다.') && !line.endsWith('까?') && !line.endsWith('요.'))
       ) {
         const cleanSub = line.replace(/^[●■◇◆▶\s]+/, '');

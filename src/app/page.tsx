@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { 
   ArrowUp, 
@@ -9,12 +9,17 @@ import {
   Printer, 
   Plus, 
   ChevronLeft, 
-  ChevronRight,
-  Newspaper,
-  HelpCircle,
-  Coffee,
-  X
+  ChevronRight, 
+  Newspaper, 
+  HelpCircle, 
+  Coffee, 
+  X,
+  Lock,
+  KeyRound,
+  BarChart3
 } from 'lucide-react';
+
+const ACCESS_PASSWORD = '0708';
 
 interface Article {
   id: string;
@@ -25,6 +30,14 @@ interface Article {
   url: string;
   source?: string;
   published?: string;
+}
+
+interface StatsData {
+  totalVisits: number;
+  todayVisits: number;
+  totalScraps: number;
+  todayScraps: number;
+  lastDate: string;
 }
 
 const decodeHtml = (html: string) => {
@@ -39,6 +52,11 @@ const decodeHtml = (html: string) => {
 };
 
 export default function Home() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [inputPassword, setInputPassword] = useState<string>('');
+  const [passwordError, setPasswordError] = useState<string>('');
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+
   const [urlInput, setUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -46,7 +64,61 @@ export default function Home() {
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showCoffeeModal, setShowCoffeeModal] = useState(false);
 
+  // 📊 관리자 비공개 통계 상태
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [stats, setStats] = useState<StatsData | null>(null);
+
   const printRef = useRef<HTMLDivElement>(null);
+
+  // 접속 시 세션 확인, 1회 방문 기록 전송, 단축키 등록
+  useEffect(() => {
+    const savedAuth = sessionStorage.getItem('news_scraper_auth');
+    if (savedAuth === 'true') {
+      setIsAuthenticated(true);
+    }
+    setIsCheckingAuth(false);
+
+    // 접속 카운트 전송
+    fetch('/api/stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'visit' }),
+    }).catch(() => {});
+
+    // Ctrl + Shift + S 단축키
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        fetchStats();
+        setShowStatsModal((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/stats');
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch {}
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputPassword === ACCESS_PASSWORD) {
+      sessionStorage.setItem('news_scraper_auth', 'true');
+      setIsAuthenticated(true);
+      setPasswordError('');
+    } else {
+      setPasswordError('비밀번호가 올바르지 않습니다. 다시 확인해 주세요.');
+      setInputPassword('');
+    }
+  };
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -88,7 +160,10 @@ export default function Home() {
     try {
       const res = await fetch('/api/scrape', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-access-password': ACCESS_PASSWORD
+        },
         body: JSON.stringify({ url: urlInput.trim() }),
       });
 
@@ -101,6 +176,13 @@ export default function Home() {
 
       setArticles((prev) => [...prev, data]);
       setUrlInput('');
+
+      // 스크랩 성공 카운트 전송
+      fetch('/api/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'scrap' }),
+      }).catch(() => {});
     } catch (err: any) {
       alert(err.message || '기사를 가져오지 못했습니다.');
     } finally {
@@ -148,7 +230,7 @@ export default function Home() {
     let currentBatch: Article[] = [];
     let currentScore = 0;
 
-    const PAGE_CAPACITY = 3600; // 4개 수용을 위해 용량 확대
+    const PAGE_CAPACITY = 3600;
     const SINGLE_ARTICLE_THRESHOLD = 2600;
 
     for (let i = 0; i < articles.length; i++) {
@@ -166,7 +248,6 @@ export default function Home() {
         continue;
       }
 
-      // 최대 4개까지 한 페이지에 수용
       if (
         (currentScore + score > PAGE_CAPACITY && currentBatch.length >= 2) ||
         currentBatch.length >= 4
@@ -189,6 +270,60 @@ export default function Home() {
 
   const safeCurrentPage = Math.min(currentPage, Math.max(0, pages.length - 1));
   const activePageArticles = pages[safeCurrentPage] || [];
+
+  if (isCheckingAuth) {
+    return <div className="min-h-screen bg-neutral-100 flex items-center justify-center font-sans"></div>;
+  }
+
+  // 🔒 잠금 화면
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-white rounded-2xl max-w-sm w-full p-8 shadow-xl border border-neutral-200 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-2xl bg-neutral-900 flex items-center justify-center text-white mb-4 shadow-sm">
+            <Lock className="w-6 h-6" />
+          </div>
+          
+          <h1 className="text-base font-bold text-neutral-900 mb-1">
+            신문 기사 아카이브 서비스
+          </h1>
+          <p className="text-xs text-neutral-500 mb-6">
+            서비스 이용을 위해 비밀번호를 입력해 주세요.
+          </p>
+
+          <form onSubmit={handlePasswordSubmit} className="w-full flex flex-col gap-3">
+            <div className="relative">
+              <input
+                type="password"
+                required
+                autoFocus
+                value={inputPassword}
+                onChange={(e) => setInputPassword(e.target.value)}
+                placeholder="비밀번호 입력"
+                className="w-full border border-neutral-300 rounded-xl px-4 py-2.5 text-xs text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-neutral-900"
+              />
+            </div>
+
+            {passwordError && (
+              <p className="text-[11px] text-red-500 font-medium">{passwordError}</p>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-neutral-900 text-white py-2.5 rounded-xl text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>접속하기</span>
+            </button>
+          </form>
+
+          <p className="text-[10px] text-neutral-400 mt-6">
+            © 2026 Digital-Hennie. All rights reserved.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-neutral-100 flex flex-col items-center py-6 px-4 font-sans relative">
@@ -258,6 +393,60 @@ export default function Home() {
         </div>
       </header>
 
+      {/* 📊 비공개 관리자 모달 (Ctrl+Shift+S 로 열림) */}
+      {showStatsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-neutral-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-sm font-bold text-neutral-900">관리자 통계 현황</h2>
+              </div>
+              <button
+                onClick={() => setShowStatsModal(false)}
+                className="text-neutral-400 hover:text-neutral-700 p-1.5 rounded-lg hover:bg-neutral-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {stats ? (
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-center">
+                  <p className="text-[11px] text-indigo-600 font-medium">오늘 방문자</p>
+                  <p className="text-xl font-bold text-indigo-950 mt-0.5">{stats.todayVisits}회</p>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-center">
+                  <p className="text-[11px] text-indigo-600 font-medium">총 누적 방문</p>
+                  <p className="text-xl font-bold text-indigo-950 mt-0.5">{stats.totalVisits}회</p>
+                </div>
+                <div className="bg-neutral-50 border border-neutral-200 p-3 rounded-xl text-center">
+                  <p className="text-[11px] text-neutral-500 font-medium">오늘 스크랩</p>
+                  <p className="text-xl font-bold text-neutral-900 mt-0.5">{stats.todayScraps}건</p>
+                </div>
+                <div className="bg-neutral-50 border border-neutral-200 p-3 rounded-xl text-center">
+                  <p className="text-[11px] text-neutral-500 font-medium">총 누적 스크랩</p>
+                  <p className="text-xl font-bold text-neutral-900 mt-0.5">{stats.totalScraps}건</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-400 text-center py-4">통계 데이터를 불러오는 중...</p>
+            )}
+
+            <p className="text-[10px] text-neutral-400 text-center mb-4">
+              단축키 <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono font-bold">Ctrl+Shift+S</code> 로 관리자 모달을 열고 닫을 수 있습니다.
+            </p>
+
+            <button
+              onClick={() => setShowStatsModal(false)}
+              className="w-full bg-neutral-900 text-white py-2 rounded-xl text-xs font-semibold hover:bg-neutral-800 cursor-pointer"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 이용방법 안내 모달 */}
       {showGuideModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
@@ -267,12 +456,37 @@ export default function Home() {
                 <HelpCircle className="w-5 h-5 text-blue-600" />
                 <h2 className="text-base font-bold text-neutral-900">서비스 이용안내 및 주의사항</h2>
               </div>
-              <button onClick={() => setShowGuideModal(false)} className="text-neutral-400 hover:text-neutral-700 p-1 rounded-lg hover:bg-neutral-100">
+              <button onClick={() => setShowGuideModal(false)} className="text-neutral-400 hover:text-neutral-700 p-1 rounded-lg hover:bg-neutral-100 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3.5 text-xs leading-relaxed text-neutral-600">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 text-neutral-800">
+                <p className="font-bold text-blue-950 mb-2 flex items-center gap-1.5 text-[13px]">
+                  <span>📖</span>
+                  <span>이용방법</span>
+                </p>
+                <ol className="space-y-1.5 list-none font-medium">
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">1</span>
+                    <span>스크랩하고 싶은 뉴스의 페이지 주소 URL을 추가하여 주세요.</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">2</span>
+                    <span>기사 길이에 따라 한 페이지에 최대 4건까지 보여집니다.</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">3</span>
+                    <span>스크랩 목록에서 스크랩한 기사의 순서를 바꾸면 기사 배열 순서가 함께 바뀝니다.</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">4</span>
+                    <span>원하는 페이지가 완성 되면 우측 상단의 <strong>[현재 페이지 PDF 인쇄/저장]</strong> 버튼을 눌러 저장 또는 인쇄합니다.</span>
+                  </li>
+                </ol>
+              </div>
+
               <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3.5">
                 <p className="font-bold text-neutral-900 mb-1">📌 비상업적 개인 프로젝트 안내</p>
                 <p>본 서비스는 <strong>Digital-Hennie</strong>가 자발적으로 만든 <strong>비상업적 조판 도구</strong>입니다. 마음껏 이용하시되 상업적으로 이용하지 말아주세요.</p>
@@ -286,7 +500,7 @@ export default function Home() {
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-3.5 text-amber-900">
                 <p className="font-bold mb-1">💬 의견 및 개선 아이디어</p>
                 <p>이용하시면서 더 좋은 개선 아이디어나 의견이 생기면 언제든 메일로 연락해 주세요.</p>
-                <p className="font-semibold mt-1">📧 <a href="mailto:artmk@naver.com" className="underline">artmk@naver.com</a></p>
+                <p className="font-semibold mt-1">📧 <a href="mailto:artmkt@naver.com" className="underline">artmkt@naver.com</a></p>
               </div>
             </div>
 
@@ -311,7 +525,7 @@ export default function Home() {
                 <Coffee className="w-4 h-4 text-amber-500" />
                 개발자에게 커피 한 잔 후원하기
               </h3>
-              <button onClick={() => setShowCoffeeModal(false)} className="text-neutral-400 hover:text-neutral-700">
+              <button onClick={() => setShowCoffeeModal(false)} className="text-neutral-400 hover:text-neutral-700 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -339,7 +553,7 @@ export default function Home() {
 
             <button
               onClick={() => setShowCoffeeModal(false)}
-              className="w-full bg-neutral-900 text-white py-2 rounded-xl text-xs font-semibold hover:bg-neutral-800 transition-colors"
+              className="w-full bg-neutral-900 text-white py-2 rounded-xl text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
             >
               닫기
             </button>
@@ -460,7 +674,7 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="h-full w-full flex flex-col gap-2 overflow-hidden">
-                    {/* [CASE 4] 기사가 4개일 때: 2x2 격자 조판 */}
+                    {/* [CASE 4] 4개 2x2 격자 */}
                     {activePageArticles.length === 4 ? (
                       <div className="grid grid-cols-2 grid-rows-2 gap-2.5 h-full overflow-hidden min-h-0">
                         {activePageArticles.map((art) => {
@@ -516,7 +730,7 @@ export default function Home() {
                         })}
                       </div>
                     ) : activePageArticles.length === 3 ? (
-                      /* [CASE 3] 기사가 3개일 때: 상단 2개 + 하단 1개 */
+                      /* [CASE 3] 3개 상단 2개 + 하단 1개 */
                       <>
                         <div className="grid grid-cols-2 gap-3 flex-1 overflow-hidden min-h-0 border-b border-neutral-300 pb-2">
                           {activePageArticles.slice(0, 2).map((art) => {
@@ -627,7 +841,7 @@ export default function Home() {
                         })()}
                       </>
                     ) : (
-                      /* [CASE 1, 2] 기사가 1개 또는 2개일 때 */
+                      /* [CASE 1, 2] 1개 또는 2개 */
                       activePageArticles.map((art) => {
                         const count = activePageArticles.length;
                         const formattedDate = formatShortDate(art.published);
@@ -702,7 +916,7 @@ export default function Home() {
 
               {/* 푸터 */}
               <div className="border-t border-neutral-300 pt-1 mt-1 flex justify-between items-center text-[7.5px] text-neutral-400 newspaper-font">
-                <span>© 2026 Digital-Hennie. All rights reserved. (artmk@naver.com)</span>
+                <span>© 2026 Digital-Hennie. All rights reserved. (artmkt@naver.com)</span>
                 <span>Page {safeCurrentPage + 1}</span>
               </div>
             </div>
